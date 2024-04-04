@@ -9,11 +9,13 @@ The script helps automate the task of moving the following objects from one clus
 > [!NOTE]  
 Important note:
 This script does not apply migration to the default node pool and the default department at the moment.
-Please change them manually, before running the script.
+Please change them manually, before running the script. <br />
+> <br />
+> Make sure you also have an application API token for system administrator on tenant scope
 
 How to use:
 1. copy/clone the file from the repository
-2. Install the requests library ```pip install requests```
+2. Install the libraries ```pip install requests dataclasses```
 3. Under ```if __name__ == "__main__"``` edit the BASE_URL, CLEINT_ID, CLIENT_SECRET, REALM
 4. Under the two ```Cluster()``` objects, edit the ```cluster_id``` to match the cluster id of the current production/old cluster, and the cluster id of the new cluster<br />
 > [!WARNING] 
