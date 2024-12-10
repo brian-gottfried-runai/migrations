@@ -63,10 +63,12 @@ if __name__ == "__main__":
 
     response = requests.get(f"{cluster.base_url}/v1/k8s/clusters/{cluster.cluster_id}/departments", headers=headers)
     response.raise_for_status()
+    departments=response.json()
 
     ##### Projects #####
     response = requests.get(f"{cluster.base_url}/v1/k8s/clusters/{cluster.cluster_id}/projects", headers=headers)
     response.raise_for_status()
+    projects=response.json()
 
     #### Access Rules ####
     response = requests.get(f"{cluster.base_url}/api/v1/authorization/access-rules", headers=headers)
