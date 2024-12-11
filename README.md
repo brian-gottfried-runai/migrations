@@ -5,20 +5,24 @@ The script helps automate the task of moving the following objects from one clus
 - Departments
 - Node Pools
 - Access Rules
+- Compute Assets
+- Environment Assets
+- Workload Templates
+- Datasources
+- Policies
+- Interactive Workloads
+- Training Workloads
 
 > [!NOTE]  
 Important note:
 This script does not apply migration to the default node pool and the default department at the moment.
 Please change them manually, before running the script. <br />
 > <br />
-> Make sure you also have an application API token for system administrator on tenant scope
+> Make sure you also have an application API token for system administrator on tenant scope in each cluster
 
 How to use:
 1. copy/clone the file from the repository
 2. Install the libraries ```pip install requests dataclasses```
 3. Under ```if __name__ == "__main__"``` edit the BASE_URL, CLEINT_ID, CLIENT_SECRET, REALM
-4. Under the two ```Cluster()``` objects, edit the ```cluster_id``` to match the cluster id of the current production/old cluster, and the cluster id of the new cluster<br />
-> [!WARNING] 
-***Make sure to put the correct cluster ID of the production cluster first, and the new cluster second***
-5. Run the script:
-   ```python3 main.py```
+4. First, use the ```retrieve_json.py``` script to get the JSON of the resources from the old cluster. Under the  ```Cluster()``` object in that file, edit the ``` base_url ``` and ```cluster_id``` to match the old cluster and the ```client_id``` and ```client_secret``` to match the Application you set up for that cluster.
+5. Next, use the ```restore_json_REST.py``` script to use those JSON files to apply to the new cluster. Under the  ```Cluster()``` object in that file, edit the ``` base_url ``` and ```cluster_id``` to match the old cluster and the ```client_id``` and ```client_secret``` to match the Application you set up for that cluster.
