@@ -92,6 +92,12 @@ def restore_json_from_file(file_name):
     except json.decoder.JSONDecodeError as err:
         print(f"error retrieving json from {file_name}: {err}")
         return None
+    
+#Used to retrieve environment, compute, and datasource asset ids for creating templates
+def get_id_by_name(apiEndpoint,resourceName):
+        response = requests.get(f"{cluster.base_url}/{apiEndpoint}", headers=headers, params=f"name={resourceName}")
+        response.raise_for_status()
+        return response.json()["entries"][0]["meta"]["id"]
 
 
 if __name__ == "__main__":
@@ -99,8 +105,8 @@ if __name__ == "__main__":
     cluster = Cluster(
         base_url="https://cs-bgottfri-jhu-2-18.runailabs-cs.com",
         client_id="migration",
-        client_secret="nkz1C4tWbk1702zl10Atix8gfhU2TV13",
-        cluster_id="ba0cf6ed-23f2-4393-9611-4396a6243379"
+        client_secret="Bf5eHQQZRWHIPWCbWyTiPwzSMN3sshLQ",
+        cluster_id="0007fa10-e809-4748-91ca-4cd3a6b8b854"
     )
 
     old_cluster_cluster_id="302809a4-d8e9-45be-b9ef-6eef5d793900"
@@ -131,6 +137,7 @@ if __name__ == "__main__":
     projects = restore_json_from_file(f"{directory_name}/projects.json")
     for project in projects:
         old_projects_map[project["id"]] = project["name"]
+    
     
     ######################### Node Pools #########################
     print('\n')
@@ -278,3 +285,98 @@ if __name__ == "__main__":
             raise SystemExit(response.text)
         else:
             print(response.text)
+
+    # ######################### Local Users #########################
+    # print('\n\n')
+    # print("######################### Local Users #########################")
+    # print('\n')
+
+    # local_users_json=restore_json_from_file(f"{directory_name}/users.json")
+    # local_users = local_users_json
+
+    # for user in local_users:
+    #     print(f"Creating local user {user}...")
+    #     body=access_rule
+    #     for key in body.keys():
+    #         if key!="username":
+    #             del body[key]
+    #     response = requests.post(f"{cluster.base_url}/api/v1/users", headers=headers, json=body)
+
+
+    ######################### Environment,Compute,Datasource,Workload Template #########################
+    for resourceType in ["environment","compute","datasource","workload-template"]:
+        print('\n\n')
+        print(f"######################### {resourceType}s #########################")
+        print('\n')
+        resourceType_json=restore_json_from_file(f"{directory_name}/{resourceType}.json")
+        resources = resourceType_json["entries"]
+
+        for entry in resources:
+            # Removing unused fields in post request
+            meta=entry["meta"]
+            #Set apiEndpoint before removing "kind" from "meta" block - necessary for datasources
+            apiEndpoint=f"api/v1/asset/{resourceType}"
+            if resourceType=="datasource":
+                datasourceKind=meta["kind"]
+                apiEndpoint=f"{apiEndpoint}/{datasourceKind}"
+            for key in ["createdAt","updatedAt","updatedBy","createdBy","id","tenantId","clusterId", "kind","projectName"]:
+                try:
+                    del meta[key]
+                except KeyError as err:
+                    continue
+            if meta["scope"] == "project":
+                meta["projectId"] = old_projects_id_to_new[int(meta["projectId"])]
+            elif meta["scope"] == "department":
+                meta["departmentId"] = str(old_departments_map_id_to_new_id[int(meta["departmentId"])])
+            elif meta["scope"] == "cluster":
+                meta["clusterId"] = cluster.cluster_id
+
+            if resourceType=="compute":
+                #clean up spec fields based on other fields
+                spec=entry["spec"]
+                if spec["gpuDevicesRequest"]!=1:
+                    del spec["gpuRequestType"]
+
+            if resourceType=="datasource":
+                #move all entries under datasourceKind to directly under spec and then remove datasourceKind
+                for field in entry["spec"][datasourceKind]:
+                    entry["spec"][field]=entry["spec"][datasourceKind][field]
+                del entry["spec"][datasourceKind]
+
+            if resourceType=="workload-template":
+                #Get ids of created assets to set in template json
+                assets=entry["spec"]["assets"]
+                try:
+                    assets["environment"]=get_id_by_name(f"/api/v1/asset/environment",assets["environment"]["name"])
+                except KeyError as err:
+                    pass
+                try:
+                    assets["compute"]=get_id_by_name(f"/api/v1/asset/compute",assets["compute"]["name"])
+                except KeyError as err:
+                    pass
+                try:
+                    for datasource in assets["datasources"]:
+                        datasource["id"]=get_id_by_name(f"/api/v1/asset/datasource/{datasource["kind"]}",datasource["name"])
+                        #Remove datasource name field since it's not in template API spec
+                        del datasource["name"]
+                    #TO-DO: Remove this line once issue with workloadSupportedTypes field is resolved
+                except KeyError as err:
+                    pass
+                try:
+                    del entry["meta"]["workloadSupportedTypes"]
+                except KeyError as err:
+                    pass
+
+            
+
+
+            print(f"Creating {resourceType} {meta["name"]} using {apiEndpoint}: {entry}...\n")
+            response = requests.post(f"{cluster.base_url}/{apiEndpoint}", headers=headers, json=entry)
+            if response.status_code == 409 and "already exists" in response.text:
+                print(f"Skipping existing {resourceType} {meta["name"]}\n")
+                continue
+            elif response.status_code > 202 and response.status_code < 409:
+                print(response.text)
+                raise SystemExit(response.text)
+            else:
+                print(response.text)
