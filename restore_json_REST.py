@@ -105,8 +105,8 @@ if __name__ == "__main__":
     cluster = Cluster(
         base_url="https://cs-bgottfri-jhu-2-18.runailabs-cs.com",
         client_id="migration",
-        client_secret="Bf5eHQQZRWHIPWCbWyTiPwzSMN3sshLQ",
-        cluster_id="0007fa10-e809-4748-91ca-4cd3a6b8b854"
+        client_secret="buvzBu7XF0mEzvHfGqdMzo0SrPlpTyu2",
+        cluster_id="6125a62b-44fc-4f11-846c-ec3754d74a98"
     )
 
     old_cluster_cluster_id="302809a4-d8e9-45be-b9ef-6eef5d793900"
@@ -118,7 +118,7 @@ if __name__ == "__main__":
     ##### NodePools #####
     node_pools_map={}
 
-    node_pools = restore_json_from_file(f"{directory_name}/node_pools.json")
+    node_pools = restore_json_from_file(f"{directory_name}/node_pool.json")
     # print(node_pools)
     for node_pool in node_pools:
         node_pool = build_node_pool_schema_from_json(node_pool)
@@ -127,14 +127,14 @@ if __name__ == "__main__":
     ##### Departments #####
     old_departments_map={}
 
-    departments = restore_json_from_file(f"{directory_name}/departments.json")
+    departments = restore_json_from_file(f"{directory_name}/department.json")
     for department in departments:
         old_departments_map[department["name"]] = department["id"]
         build_department_schema_from_json(json_data=department, node_pools_map=node_pools_map)
 
     ##### Projects #####
     old_projects_map = {}
-    projects = restore_json_from_file(f"{directory_name}/projects.json")
+    projects = restore_json_from_file(f"{directory_name}/project.json")
     for project in projects:
         old_projects_map[project["id"]] = project["name"]
     
@@ -239,7 +239,7 @@ if __name__ == "__main__":
     print("######################### Access Rules #########################")
     print('\n')
 
-    access_rules_json=restore_json_from_file(f"{directory_name}/access_rules.json")
+    access_rules_json=restore_json_from_file(f"{directory_name}/access_rule.json")
     access_rules = access_rules_json["accessRules"]
     
     # Prepare relevant maps
