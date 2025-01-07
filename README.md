@@ -11,7 +11,7 @@ The script helps automate the task of moving the following objects from one clus
 - Datasources
 - Policies
 - Interactive Workloads
-- Training Workloads
+- Training Workloads (not yet implemented)
 
 > [!NOTE]  
 Important note:
