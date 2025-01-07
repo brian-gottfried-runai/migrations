@@ -2,6 +2,7 @@ import sys
 import os
 import json
 import requests
+import logging
 from dataclasses import dataclass
 
 @dataclass
@@ -99,17 +100,26 @@ def get_id_by_name(apiEndpoint,resourceName):
         response.raise_for_status()
         return response.json()["entries"][0]["meta"]["id"]
 
+def get_api_endpoint_for_datasource(datasourceKind):
+    if datasourceKind=="hostPath":
+        return "/api/v1/asset/datasource/host-path"
+    elif datasourceKind=="configMap":
+        return "/api/v1/asset/datasource/config-map"
+    else:
+        return f"/api/v1/asset/datasource/{datasourceKind}"
+
 
 if __name__ == "__main__":
 
     cluster = Cluster(
         base_url="https://cs-bgottfri-jhu-2-18.runailabs-cs.com",
         client_id="migration",
-        client_secret="buvzBu7XF0mEzvHfGqdMzo0SrPlpTyu2",
-        cluster_id="6125a62b-44fc-4f11-846c-ec3754d74a98"
+        client_secret="yPuZ6sB4SXhvnfRw8OgxfTler6qK60B3",
+        cluster_id="0cd5df02-59bb-4938-b6fd-2e5875dd88bc"
     )
 
-    old_cluster_cluster_id="302809a4-d8e9-45be-b9ef-6eef5d793900"
+    logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
+    logging.getLogger("urllib3").setLevel("WARNING")   #Set Requests level to warning to avoid clogging logs with useless messages
 
     token = cluster.generate_api_token()
     headers = {"authorization": f"Bearer {token}", 'content-type': "application/json"}
@@ -302,6 +312,9 @@ if __name__ == "__main__":
     #             del body[key]
     #     response = requests.post(f"{cluster.base_url}/api/v1/users", headers=headers, json=body)
 
+    resourceDb={}
+    resourceOldIdToNewIdDb={}
+
 
     ######################### Environment,Compute,Datasource,Workload Template #########################
     for resourceType in ["environment","compute","datasource","workload-template"]:
@@ -310,15 +323,18 @@ if __name__ == "__main__":
         print('\n')
         resourceType_json=restore_json_from_file(f"{directory_name}/{resourceType}.json")
         resources = resourceType_json["entries"]
+        resourceDb[resourceType]={}
+        resourceOldIdToNewIdDb[resourceType]={}
 
         for entry in resources:
             # Removing unused fields in post request
             meta=entry["meta"]
+            oldId=meta["id"]
             #Set apiEndpoint before removing "kind" from "meta" block - necessary for datasources
             apiEndpoint=f"api/v1/asset/{resourceType}"
             if resourceType=="datasource":
                 datasourceKind=meta["kind"]
-                apiEndpoint=f"{apiEndpoint}/{datasourceKind}"
+                apiEndpoint=get_api_endpoint_for_datasource(datasourceKind)
             for key in ["createdAt","updatedAt","updatedBy","createdBy","id","tenantId","clusterId", "kind","projectName"]:
                 try:
                     del meta[key]
@@ -335,7 +351,10 @@ if __name__ == "__main__":
                 #clean up spec fields based on other fields
                 spec=entry["spec"]
                 if spec["gpuDevicesRequest"]!=1:
-                    del spec["gpuRequestType"]
+                    try:
+                        del spec["gpuRequestType"]
+                    except KeyError:    #Sometimes compute profiles with 0 gpu requests have this field, sometimes they don't. Not sure what makes a difference
+                        pass
 
             if resourceType=="datasource":
                 #move all entries under datasourceKind to directly under spec and then remove datasourceKind
@@ -356,14 +375,15 @@ if __name__ == "__main__":
                     pass
                 try:
                     for datasource in assets["datasources"]:
-                        datasource["id"]=get_id_by_name(f"/api/v1/asset/datasource/{datasource["kind"]}",datasource["name"])
+                        datasource["id"]=get_id_by_name(get_api_endpoint_for_datasource(datasource["kind"]),datasource["name"])
                         #Remove datasource name field since it's not in template API spec
                         del datasource["name"]
-                    #TO-DO: Remove this line once issue with workloadSupportedTypes field is resolved
                 except KeyError as err:
                     pass
+                #TO-DO: Remove these lines once issues with workloadSupportedTypes field are resolved
                 try:
-                    del entry["meta"]["workloadSupportedTypes"]
+                    del entry["meta"]["workloadSupportedTypes"] #API spec says this is supported, but when I try to submit with it set, it's rejected as an invalid field
+                    del entry["spec"]["assets"]["workloadVolumes"]  #API spec just says this field is an "Array of Strings" - no idea what the format should be for it
                 except KeyError as err:
                     pass
 
@@ -373,10 +393,98 @@ if __name__ == "__main__":
             print(f"Creating {resourceType} {meta["name"]} using {apiEndpoint}: {entry}...\n")
             response = requests.post(f"{cluster.base_url}/{apiEndpoint}", headers=headers, json=entry)
             if response.status_code == 409 and "already exists" in response.text:
-                print(f"Skipping existing {resourceType} {meta["name"]}\n")
-                continue
+                print(f"{resourceType} {meta["name"]} already exists, retrieving it instead\n")
+                getListResponse=requests.get(f"{cluster.base_url}/{apiEndpoint}?name={meta["name"]}", headers=headers)  #Get list of resources and filter by resource name
+                listJson=getListResponse.json()
+                newId=listJson["entries"][0]["meta"]["id"]
+                getResourceResponse=requests.get(f"{cluster.base_url}/{apiEndpoint}/{newId}", headers=headers)
+                responseJson=getResourceResponse.json()
             elif response.status_code > 202 and response.status_code < 409:
                 print(response.text)
                 raise SystemExit(response.text)
             else:
                 print(response.text)
+                responseJson=response.json()
+            #Add id of newly created resource to resource DB. Structure is [resourceType][optional datasource kind][resource id]=json. E.G. [environment: [001: json, 002: json], datasource: [pvc: [001: json], git: [001: json]]] etc
+            if resourceType=="datasource":
+                try:
+                    resourceDb[resourceType][datasourceKind][responseJson["meta"]["id"]]=responseJson
+                except KeyError: #Have to create key for datasourceKind before setting value inside it
+                    resourceDb[resourceType][datasourceKind]={}
+                    resourceDb[resourceType][datasourceKind][responseJson["meta"]["id"]]=responseJson
+            else:
+                resourceDb[resourceType][responseJson["meta"]["id"]]=responseJson
+            #Also add mapping of old id to new
+            if resourceType=="datasource":
+                try:
+                    resourceOldIdToNewIdDb[resourceType][datasourceKind][oldId]=responseJson["meta"]["id"]
+                except KeyError: #Have to create key for datasourceKind before setting value inside it
+                    resourceOldIdToNewIdDb[resourceType][datasourceKind]={}
+                    resourceOldIdToNewIdDb[resourceType][datasourceKind][oldId]=responseJson["meta"]["id"]
+            else:
+                resourceOldIdToNewIdDb[resourceType][oldId]=responseJson["meta"]["id"]
+
+
+    ######################### Workloads #########################
+    print('\n\n')
+    print("######################### Interactive Workloads #########################")
+    print('\n')
+
+    iws_json=restore_json_from_file(f"{directory_name}/iw.json")
+    iws = iws_json["entries"]
+    apiEndpoint='/api/v1/workloads/workspaces'
+
+    for iw in iws:
+        newIwJson={}
+        meta=iw["meta"]
+        iwName=iw["meta"]["name"]
+        oldIwId=iw["meta"]["id"]
+        newIwJson["name"]=iwName
+        newIwJson["useGivenNameAsPrefix"]=True
+        newIwJson["projectId"]=str(old_projects_id_to_new[iw["meta"]["projectId"]])
+        newIwJson["clusterId"]=cluster.cluster_id
+        newIwJson["spec"]={}
+        #Environment values
+        #Get values of environment in new cluster based on old id
+        newEnv=resourceDb["environment"][resourceOldIdToNewIdDb["environment"][iw["spec"]["assets"]["environment"]["id"]]]
+        for value in "command", "args", "image", "imagePullPolicy", "workingDir", "createHomeDir", "probes", "nodePools", "environmentVariables", "annotations", "labels", "terminateAfterPreemption", "autoDeletionTimeAfterCompletionSeconds", "backoffLimit", "ports":
+            if value in ["command", "args", "nodePools", "environmentVariables", "annotations", "labels", "terminateAfterPreemption", "autoDeletionTimeAfterCompletionSeconds", "backoffLimit", "ports"]:   #These values can be overwritten per workload
+                try:
+                    newIwJson["spec"][value]=iw["spec"]["specificEnv"][value]
+                except KeyError:
+                    logging.debug(f"Specific environment value {value} not set for workspace {iwName}, falling back to value in environment {iw["spec"]["assets"]["environment"]["name"]}")
+            else:
+                try:
+                    newIwJson["spec"][value]=newEnv["spec"][value]
+                except KeyError:
+                    logging.info(f"Unable to find value {value} for workspace {iwName}, leaving blank")
+        for value in "uidGidSource", "capabilities", "seccompProfileType", "runAsNonRoot", "readOnlyRootFilesystem", "runAsUid", "runAsGid", "supplementalGroups", "allowPrivilegeEscalation", "hostIpc", "hostNetwork":
+            try:
+                newIwJson["spec"]["security"][value]=newEnv["spec"][value]
+            except KeyError:
+                logging.info(f"Unable to find value {value} for workspace {iwName}, leaving blank")
+        #Compute Values
+        newCompute=resourceDb["compute"][resourceOldIdToNewIdDb["compute"][iw["spec"]["assets"]["compute"]["id"]]]
+        newIwJson["spec"]["compute"]=newCompute["spec"]
+        #Storage Values
+        newStorages={}
+        newIwJson["spec"]["storage"]={}
+        for storage in iw["spec"]["assets"]["datasources"]:
+            oldStorageId=storage["id"]
+            newStorages[resourceOldIdToNewIdDb["datasource"][storage["kind"]][oldStorageId]]=resourceDb["datasource"][storage["kind"]][resourceOldIdToNewIdDb["datasource"][storage["kind"]][oldStorageId]]
+            newStorageInstance=newStorages[resourceOldIdToNewIdDb["datasource"][storage["kind"]][oldStorageId]]["spec"]
+            newStorageInstance["name"]=newStorages[resourceOldIdToNewIdDb["datasource"][storage["kind"]][oldStorageId]]["meta"]["name"]   #Extract name from meta block to spec block
+            if storage["kind"] not in newIwJson["spec"]["storage"]:
+                newIwJson["spec"]["storage"][storage["kind"]]=[]    #Have to create list before we can append to it, if it doesn't already exist
+            newIwJson["spec"]["storage"][storage["kind"]].append(newStorageInstance)
+
+
+        print(f"Creating Workspace {meta["name"]} using {apiEndpoint}: {entry}...\n")
+        response = requests.post(f"{cluster.base_url}/{apiEndpoint}", headers=headers, json=newIwJson)
+        if response.status_code == 409 and "already exists" in response.text:
+            print(f"{resourceType} {meta["name"]} already exists\n")
+        elif response.status_code > 202 and response.status_code < 409:
+            print(response.text)
+            raise SystemExit(response.text)
+        else:
+            print(response.text)
