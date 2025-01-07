@@ -2,6 +2,7 @@ import sys
 import os
 import json
 import requests
+import argparse
 from dataclasses import dataclass
 
 @dataclass
@@ -40,11 +41,22 @@ def write_json_to_file(file_name,json_data):
 
 if __name__ == "__main__":
 
+    parser = argparse.ArgumentParser(description="Import Runai resources into a new cluster from json files")
+
+    # Add arguments
+    parser.add_argument('-url','--base_url', type=str, help='Base url of the cluster (e.g. https://test.run.ai)')
+    parser.add_argument('-i','--client_id', type=str, help='Client ID of the application you created in the Runai UI')
+    parser.add_argument('-s','--client_secret', type=str, help='Client Secret of the application you created in the Runai UI')
+    parser.add_argument('-c','--cluster_id', type=str, help='Cluster ID for the new Runai cluster')
+    parser.add_argument('-l', '--log_level', type=str, help="Log level (INFO,WARN,DEBUG,etc)", default="INFO")
+
+    args=parser.parse_args()
+
     cluster = Cluster(
-        base_url="https://cs-bgottfri-jhu-2-16.runailabs-cs.com",
-        client_id="migration",
-        client_secret="dpwReDT0hHmNk9Qn5Q1r9zNEhc9OEGAH",
-        cluster_id="e0a9164c-4ea3-46e1-9af1-23cc1c2f2949"
+        base_url=args.base_url,
+        client_id=args.client_id,
+        client_secret=args.client_secret,
+        cluster_id=args.cluster_id
     )
 
     token = cluster.generate_api_token()

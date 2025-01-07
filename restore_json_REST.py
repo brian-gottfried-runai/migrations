@@ -3,6 +3,8 @@ import os
 import json
 import requests
 import logging
+import argparse
+
 from dataclasses import dataclass
 
 @dataclass
@@ -111,15 +113,27 @@ def get_api_endpoint_for_datasource(datasourceKind):
 
 if __name__ == "__main__":
 
+    parser = argparse.ArgumentParser(description="Import Runai resources into a new cluster from json files")
+
+    # Add arguments
+    parser.add_argument('-url','--base_url', type=str, help='Base url of the cluster (e.g. https://test.run.ai)')
+    parser.add_argument('-i','--client_id', type=str, help='Client ID of the application you created in the Runai UI')
+    parser.add_argument('-s','--client_secret', type=str, help='Client Secret of the application you created in the Runai UI')
+    parser.add_argument('-c','--cluster_id', type=str, help='Cluster ID for the new Runai cluster')
+    parser.add_argument('-l', '--log_level', type=str, help="Log level (INFO,WARN,DEBUG,etc)", default="INFO")
+
+    args=parser.parse_args()
+
     cluster = Cluster(
-        base_url="https://cs-bgottfri-jhu-2-18.runailabs-cs.com",
-        client_id="migration",
-        client_secret="yPuZ6sB4SXhvnfRw8OgxfTler6qK60B3",
-        cluster_id="0cd5df02-59bb-4938-b6fd-2e5875dd88bc"
+        base_url=args.base_url,
+        client_id=args.client_id,
+        client_secret=args.client_secret,
+        cluster_id=args.cluster_id
     )
 
-    logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
-    logging.getLogger("urllib3").setLevel("WARNING")   #Set Requests level to warning to avoid clogging logs with useless messages
+    logging.basicConfig(level=args.log_level, format='%(levelname)s: %(message)s')
+    if args.log_level=="DEBUG":
+        logging.getLogger("urllib3").setLevel("WARNING")   #Set Requests level to warning to avoid clogging logs with useless messages
 
     token = cluster.generate_api_token()
     headers = {"authorization": f"Bearer {token}", 'content-type': "application/json"}
@@ -407,20 +421,16 @@ if __name__ == "__main__":
                 responseJson=response.json()
             #Add id of newly created resource to resource DB. Structure is [resourceType][optional datasource kind][resource id]=json. E.G. [environment: [001: json, 002: json], datasource: [pvc: [001: json], git: [001: json]]] etc
             if resourceType=="datasource":
-                try:
-                    resourceDb[resourceType][datasourceKind][responseJson["meta"]["id"]]=responseJson
-                except KeyError: #Have to create key for datasourceKind before setting value inside it
-                    resourceDb[resourceType][datasourceKind]={}
-                    resourceDb[resourceType][datasourceKind][responseJson["meta"]["id"]]=responseJson
+                if datasourceKind not in resourceDb[resourceType]:
+                    resourceDb[resourceType][datasourceKind]={} #Have to create dictionary for datasourceKind before setting value inside it
+                resourceDb[resourceType][datasourceKind][responseJson["meta"]["id"]]=responseJson
             else:
                 resourceDb[resourceType][responseJson["meta"]["id"]]=responseJson
             #Also add mapping of old id to new
             if resourceType=="datasource":
-                try:
-                    resourceOldIdToNewIdDb[resourceType][datasourceKind][oldId]=responseJson["meta"]["id"]
-                except KeyError: #Have to create key for datasourceKind before setting value inside it
-                    resourceOldIdToNewIdDb[resourceType][datasourceKind]={}
-                    resourceOldIdToNewIdDb[resourceType][datasourceKind][oldId]=responseJson["meta"]["id"]
+                if datasourceKind not in resourceOldIdToNewIdDb[resourceType]:
+                    resourceOldIdToNewIdDb[resourceType][datasourceKind]={} #Have to create dictionary for datasourceKind before setting value inside it
+                resourceOldIdToNewIdDb[resourceType][datasourceKind][oldId]=responseJson["meta"]["id"]
             else:
                 resourceOldIdToNewIdDb[resourceType][oldId]=responseJson["meta"]["id"]
 
