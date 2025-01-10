@@ -121,6 +121,8 @@ if __name__ == "__main__":
     parser.add_argument('-s','--client_secret', type=str, help='Client Secret of the application you created in the Runai UI')
     parser.add_argument('-c','--cluster_id', type=str, help='Cluster ID for the new Runai cluster')
     parser.add_argument('-l', '--log_level', type=str, help="Log level (INFO,WARN,DEBUG,etc)", default="INFO")
+    parser.add_argument('--convert_new_pvc_datasources_to_existing', action="store_true", help="Convert any PVC datasources that created a new PVC to use an existing PVC instead." \
+                        "Assumes you have already transferred over or created the PVCs in the new cluster with the same claim name as in the original cluster", default=False)
 
     args=parser.parse_args()
 
@@ -375,6 +377,11 @@ if __name__ == "__main__":
                 for field in entry["spec"][datasourceKind]:
                     entry["spec"][field]=entry["spec"][datasourceKind][field]
                 del entry["spec"][datasourceKind]
+                if datasourceKind=="pvc":
+                    if args.convert_new_pvc_datasources_to_existing:    
+                        entry["spec"]["existingPvc"]=True
+                    if "claimInfo" in entry["spec"] and  entry["spec"]["existingPvc"]:    #Don't want to specify claimInfo when the DS references an existing PVC - should only occur when --convert_new_pvc_datasources_to_existing is true
+                        del entry["spec"]["claimInfo"]
 
             if resourceType=="workload-template":
                 #Get ids of created assets to set in template json
