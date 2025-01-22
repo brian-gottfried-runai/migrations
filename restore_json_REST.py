@@ -166,32 +166,37 @@ if __name__ == "__main__":
     
     
     ######################### Node Pools #########################
-    print('\n')
-    print("######################### Node Pools #########################")
-    print('\n')
+    logging.info('\n')
+    logging.info("######################### Node Pools #########################")
+    logging.info('\n')
 
 
     node_pools_list = [build_node_pool_schema_from_json(node_pool) for node_pool in node_pools]
 
     for node_pool in node_pools_list:
-        if node_pool["name"] == "default":
-            continue
-        print(f"Creating node pool: {node_pool["name"]}...")
-        response = requests.post(f"{cluster.base_url}/v1/k8s/clusters/{cluster.cluster_id}/node-pools", headers=headers, json=node_pool)
-        
-        if response.status_code == 409 and "already exists" in response.text:
-            print(f"Skipping existing node pool {department["name"]}")
-            continue
-        elif response.status_code > 202:
-            raise SystemExit(response.text)
-        else:
-            print(response.status_code)
-        
+        try:
+            if node_pool["name"] == "default":
+                continue
+            logging.info(f"Creating node pool: {node_pool["name"]}...")
+            response = requests.post(f"{cluster.base_url}/v1/k8s/clusters/{cluster.cluster_id}/node-pools", headers=headers, json=node_pool)
+            
+            if response.status_code == 409 and "already exists" in response.text:
+                logging.info(f"Skipping existing node pool {node_pool["name"]}")
+                continue
+            elif response.status_code > 202:
+                logging.info(f"Failed to create nodepool {node_pool["name"]} due to {e}")
+                logging.debug(f"Json sent was {json.dumps(node_pool, indent=4)}")
+                raise SystemExit(response.text)
+            else:
+                logging.info(response.status_code)
+        except Exception as e:
+            logging.info(f"Failed to create nodepool {node_pool["name"]} due to {e}")
+            logging.debug(f"Json sent was {json.dumps(node_pool, indent=4)}")
 
     ######################### Departments #########################
-    print('\n\n')
-    print("######################### Departments #########################")
-    print('\n')
+    logging.info('\n\n')
+    logging.info("######################### Departments #########################")
+    logging.info('\n')
 
     node_pools_map = {}
     response = requests.get(f"{cluster.base_url}/v1/k8s/clusters/{cluster.cluster_id}/node-pools", headers=headers)
@@ -202,37 +207,40 @@ if __name__ == "__main__":
         node_pools_map[node_pool["name"]]=node_pool["id"]
     
     for department in departments:
-        if department["name"] == "default":
-            print(f"Skipping default department...")
-            continue
-        print(f"Creating department: {department["name"]}...")
-        for i, node_pool_resource in enumerate(department["nodePoolsResources"]):
-            # Change node_pool ID from 2.16 to the correct id in 2.13
-            node_pool_resource["nodePool"]["id"] = node_pools_map[node_pool_resource["nodePool"]["name"]]
-            # department = build_department_schema_from_json(department, node_pools_map=node_pools_map)
-            node_pool_resource = build_node_pool_resources_from_json(node_pool_resource, node_pools_map=node_pools_map)
-            department["nodePoolsResources"][i] = node_pool_resource
-        print(f"Old Department json: {department}")
-        new_department_json={}
-        new_department_json["name"]=department["name"]
-        new_department_json["clusterId"]=cluster.cluster_id
-        new_department_json["resources"]=department["nodePoolsResources"]
-        print("--------")
-        print(f"New Department json: {new_department_json}")
-        response = requests.post(f"{cluster.base_url}/api/v1/org-unit/departments", headers=headers, json=new_department_json)
-        if response.status_code == 409 and "already exists" in response.text:
-            print(f"Skipping existing department {department["name"]}")
-            continue
-        elif response.status_code > 202:
-            raise SystemExit(response.text)
-        else:
-            print(response.status_code)
+        try:
+            if department["name"] == "default":
+                logging.info(f"Skipping default department...")
+                continue
+            logging.info(f"Creating department: {department["name"]}...")
+            for i, node_pool_resource in enumerate(department["nodePoolsResources"]):
+                # Change node_pool ID from 2.16 to the correct id in 2.18
+                node_pool_resource["nodePool"]["id"] = node_pools_map[node_pool_resource["nodePool"]["name"]]
+                # department = build_department_schema_from_json(department, node_pools_map=node_pools_map)
+                node_pool_resource = build_node_pool_resources_from_json(node_pool_resource, node_pools_map=node_pools_map)
+                department["nodePoolsResources"][i] = node_pool_resource
+            new_department_json={}
+            new_department_json["name"]=department["name"]
+            new_department_json["clusterId"]=cluster.cluster_id
+            new_department_json["resources"]=department["nodePoolsResources"]
+            response = requests.post(f"{cluster.base_url}/api/v1/org-unit/departments", headers=headers, json=new_department_json)
+            if response.status_code == 409 and "already exists" in response.text:
+                logging.info(f"Skipping existing department {department["name"]}")
+                continue
+            elif response.status_code > 202:
+                logging.info(f"Failed to create department {department["name"]}")
+                logging.debug(f"Json sent was {json.dumps(department, indent=4)}")
+                raise SystemExit(response.text)
+            else:
+                logging.info(response.status_code)
+        except Exception as e:
+            logging.info(f"Failed to create department {department["name"]} due to {e}")
+            logging.debug(f"Json sent was {json.dumps(department, indent=4)}")
 
 
     ######################### Projects #########################
-    print('\n\n')
-    print("######################### Projects #########################")
-    print('\n')
+    logging.info('\n\n')
+    logging.info("######################### Projects #########################")
+    logging.info('\n')
 
     old_departments_map_id_to_new_id = {}
     new_departments_map = {}
@@ -247,7 +255,7 @@ if __name__ == "__main__":
 
     for project in projects:
         try:
-            print(f"Creating project: {project["name"]}...")
+            logging.info(f"Creating project: {project["name"]}...")
             project["departmentId"] = old_departments_map_id_to_new_id[project["departmentId"]]
             for i, node_pool_resource in enumerate(project["nodePoolsResources"]):
                 project_node_pool_resource_name = project["nodePoolsResources"][i]["nodePool"]["name"]
@@ -255,23 +263,23 @@ if __name__ == "__main__":
             logging.debug(f"Creating project {project["name"]} with json {project}")
             response = requests.post(f"{cluster.base_url}/v1/k8s/clusters/{cluster.cluster_id}/projects", headers=headers, json=project)
             if response.status_code == 409 and "already exists" in response.text:
-                print(f"Skipping existing project {project["name"]}")
+                logging.info(f"Skipping existing project {project["name"]}")
                 continue
             elif response.status_code > 202:
                 raise SystemExit(response.text)
                 logging.info(f"Failed to create project {project["name"]}")
-                logging.debug(f"Json sent was {project}")
+                logging.debug(f"Json sent was {json.dumps(project, indent=4)}")
             else:
-                print(response.text)
+                logging.info(response.text)
         except Exception as e:
             logging.info(f"Failed to create project {project["name"]} due to {e}")
-            logging.debug(f"Json sent was {project}")
+            logging.debug(f"Json sent was {json.dumps(project, indent=4)}")
 
 
     ######################### Access Rules #########################
-    print('\n\n')
-    print("######################### Access Rules #########################")
-    print('\n')
+    logging.info('\n\n')
+    logging.info("######################### Access Rules #########################")
+    logging.info('\n')
 
     access_rules_json=restore_json_from_file(f"{directory_name}/access_rule.json")
     access_rules = access_rules_json["accessRules"]
@@ -309,33 +317,33 @@ if __name__ == "__main__":
         elif access_rule["scopeType"] == "cluster":
             access_rule["scopeId"] = cluster.cluster_id
 
-        print(f"Creating access rule {access_rule}...")
+        logging.info(f"Creating access rule {access_rule["name"]}...")
         try:
             response = requests.post(f"{cluster.base_url}/api/v1/authorization/access-rules", headers=headers, json=access_rule)
             if response.status_code == 409 and "already exists" in response.text:
-                print(f"Skipping existing access rule {access_rule}")
+                logging.info(f"Skipping existing access rule {access_rule["name"]}")
                 continue
             elif response.status_code > 202 and response.status_code < 409:
-                print(response.text)
+                logging.info(response.text)
                 raise SystemExit(response.text)
                 logging.info(f"Failed to create access rule {access_rule["name"]}")
-                logging.debug(f"Json sent was {access_rule}")
+                logging.debug(f"Json sent was {json.dumps(access_rule, indent=4)}")
             else:
-                print(response.text)
+                logging.info(response.text)
         except Exception as e:
             logging.info(f"Failed to create access rule {access_rule["name"]} due to {e}")
-            logging.debug(f"Json sent was {access_rule}")
+            logging.debug(f"Json sent was {json.dumps(access_rule, indent=4)}")
 
     # ######################### Local Users #########################
-    # print('\n\n')
-    # print("######################### Local Users #########################")
-    # print('\n')
+    # logging.info('\n\n')
+    # logging.info("######################### Local Users #########################")
+    # logging.info('\n')
 
     # local_users_json=restore_json_from_file(f"{directory_name}/users.json")
     # local_users = local_users_json
 
     # for user in local_users:
-    #     print(f"Creating local user {user}...")
+    #     logging.info(f"Creating local user {user}...")
     #     body=access_rule
     #     for key in body.keys():
     #         if key!="username":
@@ -348,9 +356,9 @@ if __name__ == "__main__":
 
     ######################### Environment,Compute,Datasource,Workload Template #########################
     for resourceType in ["environment","compute","datasource","workload-template"]:
-        print('\n\n')
-        print(f"######################### {resourceType}s #########################")
-        print('\n')
+        logging.info('\n\n')
+        logging.info(f"######################### {resourceType}s #########################")
+        logging.info('\n')
         resourceType_json=restore_json_from_file(f"{directory_name}/{resourceType}.json")
         resources = resourceType_json["entries"]
         resourceDb[resourceType]={}
@@ -425,23 +433,23 @@ if __name__ == "__main__":
             
 
 
-            print(f"Creating {resourceType} {meta["name"]} using {apiEndpoint}: {entry}...\n")
+            logging.info(f"Creating {resourceType} {meta["name"]} using {apiEndpoint}: {entry}...\n")
             try:
                 response = requests.post(f"{cluster.base_url}/{apiEndpoint}", headers=headers, json=entry)
                 if response.status_code == 409 and "already exists" in response.text:
-                    print(f"{resourceType} {meta["name"]} already exists, retrieving it instead\n")
+                    logging.info(f"{resourceType} {meta["name"]} already exists, retrieving it instead\n")
                     getListResponse=requests.get(f"{cluster.base_url}/{apiEndpoint}?name={meta["name"]}", headers=headers)  #Get list of resources and filter by resource name
                     listJson=getListResponse.json()
                     newId=listJson["entries"][0]["meta"]["id"]
                     getResourceResponse=requests.get(f"{cluster.base_url}/{apiEndpoint}/{newId}", headers=headers)
                     responseJson=getResourceResponse.json()
                 elif response.status_code > 202 and response.status_code < 409:
-                    print(response.text)
+                    logging.info(response.text)
                     logging.info(f"Failed to create {resourceType} {entry["name"]}")
-                    logging.debug(f"Json sent was {entry}")
+                    logging.debug(f"Json sent was {json.dumps(entry, indent=4)}")
                     raise SystemExit(response.text)
                 else:
-                    print(response.text)
+                    logging.info(response.text)
                     responseJson=response.json()
                 #Add id of newly created resource to resource DB. Structure is [resourceType][optional datasource kind][resource id]=json. E.G. [environment: [001: json, 002: json], datasource: [pvc: [001: json], git: [001: json]]] etc
                 if resourceType=="datasource":
@@ -459,7 +467,7 @@ if __name__ == "__main__":
                     resourceOldIdToNewIdDb[resourceType][oldId]=responseJson["meta"]["id"]
             except Exception as e:
                 logging.info(f"Failed to create {resourceType} {entry["name"]} due to {e}")
-                logging.debug(f"Json sent was {entry}")
+                logging.debug(f"Json sent was {json.dumps(entry, indent=4)}")
 
 
     # ######################### Workloads #########################
