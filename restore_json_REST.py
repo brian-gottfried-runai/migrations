@@ -250,6 +250,7 @@ if __name__ == "__main__":
         for i, node_pool_resource in enumerate(project["nodePoolsResources"]):
             project_node_pool_resource_name = project["nodePoolsResources"][i]["nodePool"]["name"]
             project["nodePoolsResources"][i]["nodePool"]["id"] = node_pools_map[project_node_pool_resource_name]
+        logging.debug(f"Creating project {project["name"]} with json {project}")
         response = requests.post(f"{cluster.base_url}/v1/k8s/clusters/{cluster.cluster_id}/projects", headers=headers, json=project)
         if response.status_code == 409 and "already exists" in response.text:
             print(f"Skipping existing project {project["name"]}")
