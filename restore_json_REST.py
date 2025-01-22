@@ -244,21 +244,26 @@ if __name__ == "__main__":
         old_departments_map_id_to_new_id[old_departments_map[department["name"]]] = department["id"]
         new_departments_map[department["name"]] = department["id"]
 
+
     for project in projects:
-        print(f"Creating project: {project["name"]}...")
-        project["departmentId"] = old_departments_map_id_to_new_id[project["departmentId"]]
-        for i, node_pool_resource in enumerate(project["nodePoolsResources"]):
-            project_node_pool_resource_name = project["nodePoolsResources"][i]["nodePool"]["name"]
-            project["nodePoolsResources"][i]["nodePool"]["id"] = node_pools_map[project_node_pool_resource_name]
-        logging.debug(f"Creating project {project["name"]} with json {project}")
-        response = requests.post(f"{cluster.base_url}/v1/k8s/clusters/{cluster.cluster_id}/projects", headers=headers, json=project)
-        if response.status_code == 409 and "already exists" in response.text:
-            print(f"Skipping existing project {project["name"]}")
-            continue
-        elif response.status_code > 202:
-            raise SystemExit(response.text)
-        else:
-            print(response.text)
+        try:
+            print(f"Creating project: {project["name"]}...")
+            project["departmentId"] = old_departments_map_id_to_new_id[project["departmentId"]]
+            for i, node_pool_resource in enumerate(project["nodePoolsResources"]):
+                project_node_pool_resource_name = project["nodePoolsResources"][i]["nodePool"]["name"]
+                project["nodePoolsResources"][i]["nodePool"]["id"] = node_pools_map[project_node_pool_resource_name]
+            logging.debug(f"Creating project {project["name"]} with json {project}")
+            response = requests.post(f"{cluster.base_url}/v1/k8s/clusters/{cluster.cluster_id}/projects", headers=headers, json=project)
+            if response.status_code == 409 and "already exists" in response.text:
+                print(f"Skipping existing project {project["name"]}")
+                continue
+            elif response.status_code > 202:
+                raise SystemExit(response.text)
+            else:
+                print(response.text)
+        except Exception as e:
+            logging.info(f"Failed to create project {project["name"]} due to {e}")
+            logging.debug(f"Json sent was {project}")
 
 
     ######################### Access Rules #########################
@@ -303,15 +308,19 @@ if __name__ == "__main__":
             access_rule["scopeId"] = cluster.cluster_id
 
         print(f"Creating access rule {access_rule}...")
-        response = requests.post(f"{cluster.base_url}/api/v1/authorization/access-rules", headers=headers, json=access_rule)
-        if response.status_code == 409 and "already exists" in response.text:
-            print(f"Skipping existing access rule {access_rule}")
-            continue
-        elif response.status_code > 202 and response.status_code < 409:
-            print(response.text)
-            raise SystemExit(response.text)
-        else:
-            print(response.text)
+        try:
+            response = requests.post(f"{cluster.base_url}/api/v1/authorization/access-rules", headers=headers, json=access_rule)
+            if response.status_code == 409 and "already exists" in response.text:
+                print(f"Skipping existing access rule {access_rule}")
+                continue
+            elif response.status_code > 202 and response.status_code < 409:
+                print(response.text)
+                raise SystemExit(response.text)
+            else:
+                print(response.text)
+        except Exception as e:
+            logging.info(f"Failed to create access rule {access_rule["name"]} due to {e}")
+            logging.debug(f"Json sent was {access_rule}")
 
     # ######################### Local Users #########################
     # print('\n\n')
@@ -413,34 +422,38 @@ if __name__ == "__main__":
 
 
             print(f"Creating {resourceType} {meta["name"]} using {apiEndpoint}: {entry}...\n")
-            response = requests.post(f"{cluster.base_url}/{apiEndpoint}", headers=headers, json=entry)
-            if response.status_code == 409 and "already exists" in response.text:
-                print(f"{resourceType} {meta["name"]} already exists, retrieving it instead\n")
-                getListResponse=requests.get(f"{cluster.base_url}/{apiEndpoint}?name={meta["name"]}", headers=headers)  #Get list of resources and filter by resource name
-                listJson=getListResponse.json()
-                newId=listJson["entries"][0]["meta"]["id"]
-                getResourceResponse=requests.get(f"{cluster.base_url}/{apiEndpoint}/{newId}", headers=headers)
-                responseJson=getResourceResponse.json()
-            elif response.status_code > 202 and response.status_code < 409:
-                print(response.text)
-                raise SystemExit(response.text)
-            else:
-                print(response.text)
-                responseJson=response.json()
-            #Add id of newly created resource to resource DB. Structure is [resourceType][optional datasource kind][resource id]=json. E.G. [environment: [001: json, 002: json], datasource: [pvc: [001: json], git: [001: json]]] etc
-            if resourceType=="datasource":
-                if datasourceKind not in resourceDb[resourceType]:
-                    resourceDb[resourceType][datasourceKind]={} #Have to create dictionary for datasourceKind before setting value inside it
-                resourceDb[resourceType][datasourceKind][responseJson["meta"]["id"]]=responseJson
-            else:
-                resourceDb[resourceType][responseJson["meta"]["id"]]=responseJson
-            #Also add mapping of old id to new
-            if resourceType=="datasource":
-                if datasourceKind not in resourceOldIdToNewIdDb[resourceType]:
-                    resourceOldIdToNewIdDb[resourceType][datasourceKind]={} #Have to create dictionary for datasourceKind before setting value inside it
-                resourceOldIdToNewIdDb[resourceType][datasourceKind][oldId]=responseJson["meta"]["id"]
-            else:
-                resourceOldIdToNewIdDb[resourceType][oldId]=responseJson["meta"]["id"]
+            try:
+                response = requests.post(f"{cluster.base_url}/{apiEndpoint}", headers=headers, json=entry)
+                if response.status_code == 409 and "already exists" in response.text:
+                    print(f"{resourceType} {meta["name"]} already exists, retrieving it instead\n")
+                    getListResponse=requests.get(f"{cluster.base_url}/{apiEndpoint}?name={meta["name"]}", headers=headers)  #Get list of resources and filter by resource name
+                    listJson=getListResponse.json()
+                    newId=listJson["entries"][0]["meta"]["id"]
+                    getResourceResponse=requests.get(f"{cluster.base_url}/{apiEndpoint}/{newId}", headers=headers)
+                    responseJson=getResourceResponse.json()
+                elif response.status_code > 202 and response.status_code < 409:
+                    print(response.text)
+                    raise SystemExit(response.text)
+                else:
+                    print(response.text)
+                    responseJson=response.json()
+                #Add id of newly created resource to resource DB. Structure is [resourceType][optional datasource kind][resource id]=json. E.G. [environment: [001: json, 002: json], datasource: [pvc: [001: json], git: [001: json]]] etc
+                if resourceType=="datasource":
+                    if datasourceKind not in resourceDb[resourceType]:
+                        resourceDb[resourceType][datasourceKind]={} #Have to create dictionary for datasourceKind before setting value inside it
+                    resourceDb[resourceType][datasourceKind][responseJson["meta"]["id"]]=responseJson
+                else:
+                    resourceDb[resourceType][responseJson["meta"]["id"]]=responseJson
+                #Also add mapping of old id to new
+                if resourceType=="datasource":
+                    if datasourceKind not in resourceOldIdToNewIdDb[resourceType]:
+                        resourceOldIdToNewIdDb[resourceType][datasourceKind]={} #Have to create dictionary for datasourceKind before setting value inside it
+                    resourceOldIdToNewIdDb[resourceType][datasourceKind][oldId]=responseJson["meta"]["id"]
+                else:
+                    resourceOldIdToNewIdDb[resourceType][oldId]=responseJson["meta"]["id"]
+            except Exception as e:
+                logging.info(f"Failed to create {resourceType} {entry["name"]} due to {e}")
+                logging.debug(f"Json sent was {entry}")
 
 
     # ######################### Workloads #########################
