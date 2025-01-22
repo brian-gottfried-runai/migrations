@@ -442,66 +442,66 @@ if __name__ == "__main__":
                 resourceOldIdToNewIdDb[resourceType][oldId]=responseJson["meta"]["id"]
 
 
-    ######################### Workloads #########################
-    print('\n\n')
-    print("######################### Interactive Workloads #########################")
-    print('\n')
+    # ######################### Workloads #########################
+    # print('\n\n')
+    # print("######################### Interactive Workloads #########################")
+    # print('\n')
 
-    iws_json=restore_json_from_file(f"{directory_name}/iw.json")
-    iws = iws_json["entries"]
-    apiEndpoint='/api/v1/workloads/workspaces'
+    # iws_json=restore_json_from_file(f"{directory_name}/iw.json")
+    # iws = iws_json["entries"]
+    # apiEndpoint='/api/v1/workloads/workspaces'
 
-    for iw in iws:
-        newIwJson={}
-        meta=iw["meta"]
-        iwName=iw["meta"]["name"]
-        oldIwId=iw["meta"]["id"]
-        newIwJson["name"]=iwName
-        newIwJson["useGivenNameAsPrefix"]=True
-        newIwJson["projectId"]=str(old_projects_id_to_new[iw["meta"]["projectId"]])
-        newIwJson["clusterId"]=cluster.cluster_id
-        newIwJson["spec"]={}
-        #Environment values
-        #Get values of environment in new cluster based on old id
-        newEnv=resourceDb["environment"][resourceOldIdToNewIdDb["environment"][iw["spec"]["assets"]["environment"]["id"]]]
-        for value in "command", "args", "image", "imagePullPolicy", "workingDir", "createHomeDir", "probes", "nodePools", "environmentVariables", "annotations", "labels", "terminateAfterPreemption", "autoDeletionTimeAfterCompletionSeconds", "backoffLimit", "ports":
-            if value in ["command", "args", "nodePools", "environmentVariables", "annotations", "labels", "terminateAfterPreemption", "autoDeletionTimeAfterCompletionSeconds", "backoffLimit", "ports"]:   #These values can be overwritten per workload
-                try:
-                    newIwJson["spec"][value]=iw["spec"]["specificEnv"][value]
-                except KeyError:
-                    logging.debug(f"Specific environment value {value} not set for workspace {iwName}, falling back to value in environment {iw["spec"]["assets"]["environment"]["name"]}")
-            else:
-                try:
-                    newIwJson["spec"][value]=newEnv["spec"][value]
-                except KeyError:
-                    logging.info(f"Unable to find value {value} for workspace {iwName}, leaving blank")
-        for value in "uidGidSource", "capabilities", "seccompProfileType", "runAsNonRoot", "readOnlyRootFilesystem", "runAsUid", "runAsGid", "supplementalGroups", "allowPrivilegeEscalation", "hostIpc", "hostNetwork":
-            try:
-                newIwJson["spec"]["security"][value]=newEnv["spec"][value]
-            except KeyError:
-                logging.info(f"Unable to find value {value} for workspace {iwName}, leaving blank")
-        #Compute Values
-        newCompute=resourceDb["compute"][resourceOldIdToNewIdDb["compute"][iw["spec"]["assets"]["compute"]["id"]]]
-        newIwJson["spec"]["compute"]=newCompute["spec"]
-        #Storage Values
-        newStorages={}
-        newIwJson["spec"]["storage"]={}
-        for storage in iw["spec"]["assets"]["datasources"]:
-            oldStorageId=storage["id"]
-            newStorages[resourceOldIdToNewIdDb["datasource"][storage["kind"]][oldStorageId]]=resourceDb["datasource"][storage["kind"]][resourceOldIdToNewIdDb["datasource"][storage["kind"]][oldStorageId]]
-            newStorageInstance=newStorages[resourceOldIdToNewIdDb["datasource"][storage["kind"]][oldStorageId]]["spec"]
-            newStorageInstance["name"]=newStorages[resourceOldIdToNewIdDb["datasource"][storage["kind"]][oldStorageId]]["meta"]["name"]   #Extract name from meta block to spec block
-            if storage["kind"] not in newIwJson["spec"]["storage"]:
-                newIwJson["spec"]["storage"][storage["kind"]]=[]    #Have to create list before we can append to it, if it doesn't already exist
-            newIwJson["spec"]["storage"][storage["kind"]].append(newStorageInstance)
+    # for iw in iws:
+    #     newIwJson={}
+    #     meta=iw["meta"]
+    #     iwName=iw["meta"]["name"]
+    #     oldIwId=iw["meta"]["id"]
+    #     newIwJson["name"]=iwName
+    #     newIwJson["useGivenNameAsPrefix"]=True
+    #     newIwJson["projectId"]=str(old_projects_id_to_new[iw["meta"]["projectId"]])
+    #     newIwJson["clusterId"]=cluster.cluster_id
+    #     newIwJson["spec"]={}
+    #     #Environment values
+    #     #Get values of environment in new cluster based on old id
+    #     newEnv=resourceDb["environment"][resourceOldIdToNewIdDb["environment"][iw["spec"]["assets"]["environment"]["id"]]]
+    #     for value in "command", "args", "image", "imagePullPolicy", "workingDir", "createHomeDir", "probes", "nodePools", "environmentVariables", "annotations", "labels", "terminateAfterPreemption", "autoDeletionTimeAfterCompletionSeconds", "backoffLimit", "ports":
+    #         if value in ["command", "args", "nodePools", "environmentVariables", "annotations", "labels", "terminateAfterPreemption", "autoDeletionTimeAfterCompletionSeconds", "backoffLimit", "ports"]:   #These values can be overwritten per workload
+    #             try:
+    #                 newIwJson["spec"][value]=iw["spec"]["specificEnv"][value]
+    #             except KeyError:
+    #                 logging.debug(f"Specific environment value {value} not set for workspace {iwName}, falling back to value in environment {iw["spec"]["assets"]["environment"]["name"]}")
+    #         else:
+    #             try:
+    #                 newIwJson["spec"][value]=newEnv["spec"][value]
+    #             except KeyError:
+    #                 logging.info(f"Unable to find value {value} for workspace {iwName}, leaving blank")
+    #     for value in "uidGidSource", "capabilities", "seccompProfileType", "runAsNonRoot", "readOnlyRootFilesystem", "runAsUid", "runAsGid", "supplementalGroups", "allowPrivilegeEscalation", "hostIpc", "hostNetwork":
+    #         try:
+    #             newIwJson["spec"]["security"][value]=newEnv["spec"][value]
+    #         except KeyError:
+    #             logging.info(f"Unable to find value {value} for workspace {iwName}, leaving blank")
+    #     #Compute Values
+    #     newCompute=resourceDb["compute"][resourceOldIdToNewIdDb["compute"][iw["spec"]["assets"]["compute"]["id"]]]
+    #     newIwJson["spec"]["compute"]=newCompute["spec"]
+    #     #Storage Values
+    #     newStorages={}
+    #     newIwJson["spec"]["storage"]={}
+    #     for storage in iw["spec"]["assets"]["datasources"]:
+    #         oldStorageId=storage["id"]
+    #         newStorages[resourceOldIdToNewIdDb["datasource"][storage["kind"]][oldStorageId]]=resourceDb["datasource"][storage["kind"]][resourceOldIdToNewIdDb["datasource"][storage["kind"]][oldStorageId]]
+    #         newStorageInstance=newStorages[resourceOldIdToNewIdDb["datasource"][storage["kind"]][oldStorageId]]["spec"]
+    #         newStorageInstance["name"]=newStorages[resourceOldIdToNewIdDb["datasource"][storage["kind"]][oldStorageId]]["meta"]["name"]   #Extract name from meta block to spec block
+    #         if storage["kind"] not in newIwJson["spec"]["storage"]:
+    #             newIwJson["spec"]["storage"][storage["kind"]]=[]    #Have to create list before we can append to it, if it doesn't already exist
+    #         newIwJson["spec"]["storage"][storage["kind"]].append(newStorageInstance)
 
 
-        print(f"Creating Workspace {meta["name"]} using {apiEndpoint}: {entry}...\n")
-        response = requests.post(f"{cluster.base_url}/{apiEndpoint}", headers=headers, json=newIwJson)
-        if response.status_code == 409 and "already exists" in response.text:
-            print(f"{resourceType} {meta["name"]} already exists\n")
-        elif response.status_code > 202 and response.status_code < 409:
-            print(response.text)
-            raise SystemExit(response.text)
-        else:
-            print(response.text)
+    #     print(f"Creating Workspace {meta["name"]} using {apiEndpoint}: {entry}...\n")
+    #     response = requests.post(f"{cluster.base_url}/{apiEndpoint}", headers=headers, json=newIwJson)
+    #     if response.status_code == 409 and "already exists" in response.text:
+    #         print(f"{resourceType} {meta["name"]} already exists\n")
+    #     elif response.status_code > 202 and response.status_code < 409:
+    #         print(response.text)
+    #         raise SystemExit(response.text)
+    #     else:
+    #         print(response.text)
