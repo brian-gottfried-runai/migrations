@@ -258,7 +258,9 @@ if __name__ == "__main__":
                 print(f"Skipping existing project {project["name"]}")
                 continue
             elif response.status_code > 202:
-                raise SystemExit(response.text)
+                #raise SystemExit(response.text)
+                logging.info(f"Failed to create project {project["name"]}")
+                logging.debug(f"Json sent was {project}")
             else:
                 print(response.text)
         except Exception as e:
@@ -315,7 +317,9 @@ if __name__ == "__main__":
                 continue
             elif response.status_code > 202 and response.status_code < 409:
                 print(response.text)
-                raise SystemExit(response.text)
+                #raise SystemExit(response.text)
+                logging.info(f"Failed to create access rule {access_rule["name"]}")
+                logging.debug(f"Json sent was {access_rule}")
             else:
                 print(response.text)
         except Exception as e:
@@ -433,7 +437,10 @@ if __name__ == "__main__":
                     responseJson=getResourceResponse.json()
                 elif response.status_code > 202 and response.status_code < 409:
                     print(response.text)
-                    raise SystemExit(response.text)
+                    logging.info(f"Failed to create {resourceType} {entry["name"]}")
+                    logging.debug(f"Json sent was {entry}")
+                    #raise SystemExit(response.text)
+                    continue
                 else:
                     print(response.text)
                     responseJson=response.json()
