@@ -4,7 +4,7 @@ import json
 import requests
 import logging
 import argparse
-
+import pprint
 from dataclasses import dataclass
 
 @dataclass
@@ -102,13 +102,17 @@ def get_id_by_name(apiEndpoint,resourceName):
         response.raise_for_status()
         return response.json()["entries"][0]["meta"]["id"]
 
-def get_api_endpoint_for_datasource(datasourceKind):
-    if datasourceKind=="hostPath":
-        return "/api/v1/asset/datasource/host-path"
-    elif datasourceKind=="configMap":
-        return "/api/v1/asset/datasource/config-map"
-    else:
-        return f"/api/v1/asset/datasource/{datasourceKind}"
+def get_api_endpoint_for_resource(resourceType,kind):
+    return f"/api/v1/asset/{resourceType}/{camel_to_hyphen(kind)}"
+
+def camel_to_hyphen(s):
+    result = []
+    for c in s:
+        if c.isupper():
+            result.extend(['-', c.lower()])
+        else:
+            result.append(c)
+    return ''.join(result)
 
 
 if __name__ == "__main__":
@@ -133,7 +137,7 @@ if __name__ == "__main__":
         cluster_id=args.cluster_id
     )
 
-    logging.basicConfig(level=args.log_level, format='%(levelname)s: %(message)s')
+    logging.basicConfig(level=args.log_level, format='%(levelname)s: %(message)s\n')
     if args.log_level=="DEBUG":
         logging.getLogger("urllib3").setLevel("WARNING")   #Set Requests level to warning to avoid clogging logs with useless messages
 
@@ -166,9 +170,9 @@ if __name__ == "__main__":
     
     
     ######################### Node Pools #########################
-    logging.info('\n')
+    print('\n')
     logging.info("######################### Node Pools #########################")
-    logging.info('\n')
+
 
 
     node_pools_list = [build_node_pool_schema_from_json(node_pool) for node_pool in node_pools]
@@ -185,18 +189,18 @@ if __name__ == "__main__":
                 continue
             elif response.status_code > 202:
                 logging.info(f"Failed to create nodepool {node_pool["name"]} due to {e}")
-                logging.debug(f"Json sent was {json.dumps(node_pool, indent=4)}")
+                logging.debug(f"Json sent was {pprint.pformat(node_pool)}")
                 raise SystemExit(response.text)
             else:
                 logging.info(response.status_code)
         except Exception as e:
             logging.info(f"Failed to create nodepool {node_pool["name"]} due to {e}")
-            logging.debug(f"Json sent was {json.dumps(node_pool, indent=4)}")
+            logging.debug(f"Json sent was {pprint.pformat(node_pool)}")
 
     ######################### Departments #########################
-    logging.info('\n\n')
+    print('\n\n')
     logging.info("######################### Departments #########################")
-    logging.info('\n')
+    print('\n')
 
     node_pools_map = {}
     response = requests.get(f"{cluster.base_url}/v1/k8s/clusters/{cluster.cluster_id}/node-pools", headers=headers)
@@ -228,19 +232,19 @@ if __name__ == "__main__":
                 continue
             elif response.status_code > 202:
                 logging.info(f"Failed to create department {department["name"]}")
-                logging.debug(f"Json sent was {json.dumps(department, indent=4)}")
+                logging.debug(f"Json sent was {pprint.pformat(department)}")
                 raise SystemExit(response.text)
             else:
                 logging.info(response.status_code)
         except Exception as e:
             logging.info(f"Failed to create department {department["name"]} due to {e}")
-            logging.debug(f"Json sent was {json.dumps(department, indent=4)}")
+            logging.debug(f"Json sent was {pprint.pformat(department)}")
 
 
     ######################### Projects #########################
-    logging.info('\n\n')
+    print('\n\n')
     logging.info("######################### Projects #########################")
-    logging.info('\n')
+    print('\n')
 
     old_departments_map_id_to_new_id = {}
     new_departments_map = {}
@@ -255,31 +259,30 @@ if __name__ == "__main__":
 
     for project in projects:
         try:
-            logging.info(f"Creating project: {project["name"]}...")
+            logging.info(f"Creating project: {project["name"]}")
             project["departmentId"] = old_departments_map_id_to_new_id[project["departmentId"]]
             for i, node_pool_resource in enumerate(project["nodePoolsResources"]):
                 project_node_pool_resource_name = project["nodePoolsResources"][i]["nodePool"]["name"]
                 project["nodePoolsResources"][i]["nodePool"]["id"] = node_pools_map[project_node_pool_resource_name]
-            logging.debug(f"Creating project {project["name"]} with json {project}")
             response = requests.post(f"{cluster.base_url}/v1/k8s/clusters/{cluster.cluster_id}/projects", headers=headers, json=project)
             if response.status_code == 409 and "already exists" in response.text:
                 logging.info(f"Skipping existing project {project["name"]}")
                 continue
             elif response.status_code > 202:
-                raise SystemExit(response.text)
                 logging.info(f"Failed to create project {project["name"]}")
-                logging.debug(f"Json sent was {json.dumps(project, indent=4)}")
+                logging.debug(f"Json sent was {pprint.pformat(project)}")
+                raise SystemExit(response.text)
             else:
                 logging.info(response.text)
         except Exception as e:
             logging.info(f"Failed to create project {project["name"]} due to {e}")
-            logging.debug(f"Json sent was {json.dumps(project, indent=4)}")
+            logging.debug(f"Json sent was {pprint.pformat(project)}")
 
 
     ######################### Access Rules #########################
-    logging.info('\n\n')
+    print('\n\n')
     logging.info("######################### Access Rules #########################")
-    logging.info('\n')
+    print('\n')
 
     access_rules_json=restore_json_from_file(f"{directory_name}/access_rule.json")
     access_rules = access_rules_json["accessRules"]
@@ -296,13 +299,16 @@ if __name__ == "__main__":
     for key, value in old_projects_map.items():
         old_projects_id_to_new[key] = new_projects_map[value]
     
-
     for access_rule in access_rules:
         # Skip any clusters that do not belong to 2.16 for now, or if clusterId empty
         # if "clusterId" not in access_rule:
         #     continue
         # if access_rule["clusterId"] != old_cluster_cluster_id:
         #     continue
+
+        #Store old roleName and scopeName for logging purposes
+        oldRoleName=access_rule["roleName"]
+        oldScopeName=access_rule["scopeName"]
         # Removing unused fields in post request
         for key in ["roleName","scopeName","createdAt","updatedAt","createdBy","id","tenantId","clusterId"]:
             try:
@@ -317,7 +323,7 @@ if __name__ == "__main__":
         elif access_rule["scopeType"] == "cluster":
             access_rule["scopeId"] = cluster.cluster_id
 
-        logging.info(f"Creating access rule {access_rule["name"]}...")
+        logging.info(f"Creating access rule for user {access_rule["subjectId"]} and role {oldRoleName} with scope {oldScopeName}")
         try:
             response = requests.post(f"{cluster.base_url}/api/v1/authorization/access-rules", headers=headers, json=access_rule)
             if response.status_code == 409 and "already exists" in response.text:
@@ -325,40 +331,24 @@ if __name__ == "__main__":
                 continue
             elif response.status_code > 202 and response.status_code < 409:
                 logging.info(response.text)
+                logging.info(f"Failed to create access rule for user {access_rule["subjectId"]} and role {oldRoleName} with scope {oldScopeName} due to {e}")
+                logging.debug(f"Json sent was {pprint.pformat(access_rule)}")
                 raise SystemExit(response.text)
-                logging.info(f"Failed to create access rule {access_rule["name"]}")
-                logging.debug(f"Json sent was {json.dumps(access_rule, indent=4)}")
             else:
                 logging.info(response.text)
         except Exception as e:
-            logging.info(f"Failed to create access rule {access_rule["name"]} due to {e}")
-            logging.debug(f"Json sent was {json.dumps(access_rule, indent=4)}")
-
-    # ######################### Local Users #########################
-    # logging.info('\n\n')
-    # logging.info("######################### Local Users #########################")
-    # logging.info('\n')
-
-    # local_users_json=restore_json_from_file(f"{directory_name}/users.json")
-    # local_users = local_users_json
-
-    # for user in local_users:
-    #     logging.info(f"Creating local user {user}...")
-    #     body=access_rule
-    #     for key in body.keys():
-    #         if key!="username":
-    #             del body[key]
-    #     response = requests.post(f"{cluster.base_url}/api/v1/users", headers=headers, json=body)
+            logging.info(f"Failed to create access rule for user {access_rule["subjectId"]} and role {oldRoleName} with scope {oldScopeName} due to {e}")
+            logging.debug(f"Json sent was {pprint.pformat(access_rule)}")
 
     resourceDb={}
     resourceOldIdToNewIdDb={}
 
 
     ######################### Environment,Compute,Datasource,Workload Template #########################
-    for resourceType in ["environment","compute","datasource","workload-template"]:
-        logging.info('\n\n')
+    for resourceType in ["environment","compute","credentials","datasource","workload-template"]:
+        print('\n\n')
         logging.info(f"######################### {resourceType}s #########################")
-        logging.info('\n')
+        print('\n')
         resourceType_json=restore_json_from_file(f"{directory_name}/{resourceType}.json")
         resources = resourceType_json["entries"]
         resourceDb[resourceType]={}
@@ -368,11 +358,11 @@ if __name__ == "__main__":
             # Removing unused fields in post request
             meta=entry["meta"]
             oldId=meta["id"]
-            #Set apiEndpoint before removing "kind" from "meta" block - necessary for datasources
+            #Set apiEndpoint before removing "kind" from "meta" block - necessary for credentials and datasources
             apiEndpoint=f"api/v1/asset/{resourceType}"
-            if resourceType=="datasource":
-                datasourceKind=meta["kind"]
-                apiEndpoint=get_api_endpoint_for_datasource(datasourceKind)
+            if resourceType in ["credentials","datasource"]:
+                resourceKind=meta["kind"]
+                apiEndpoint=get_api_endpoint_for_resource(resourceType,resourceKind)
             for key in ["createdAt","updatedAt","updatedBy","createdBy","id","tenantId","clusterId", "kind","projectName"]:
                 try:
                     del meta[key]
@@ -393,17 +383,31 @@ if __name__ == "__main__":
                         del spec["gpuRequestType"]
                     except KeyError:    #Sometimes compute profiles with 0 gpu requests have this field, sometimes they don't. Not sure what makes a difference
                         pass
+                      
+            if resourceType=="credentials":
+                    #.spec.existingSecretName must be set (if it's not already) for this credential to be useful, as otherwise some or all of the data is obfuscated when retrieved from the API. Secrets must be moved manually before or after this script is run.
+                    if "existingSecretName" not in entry["spec"][resourceKind]:
+                        entry["spec"]["existingSecretName"]=f"{resourceKind.lower()}-{meta["name"]}"   #Auto-generated secrets are named in the format {resourceKind (lowercased)}-{resourceName} e.g. accesskey-runai-wide for an AccessKey credential named runai-wide
+                    else:
+                        entry["spec"]["existingSecretName"]=entry["spec"][resourceKind]["existingSecretName"]
+                    for key in list(entry["spec"].keys()):   #When creating from an existing secret, the only field that should be in spec is existingSecretName
+                        if key!="existingSecretName": 
+                            del entry["spec"][key]
 
             if resourceType=="datasource":
-                #move all entries under datasourceKind to directly under spec and then remove datasourceKind
-                for field in entry["spec"][datasourceKind]:
-                    entry["spec"][field]=entry["spec"][datasourceKind][field]
-                del entry["spec"][datasourceKind]
-                if datasourceKind=="pvc":
+                #move all entries under resourceKind to directly under spec and then remove resourceKind
+                for field in entry["spec"][resourceKind]:
+                    entry["spec"][field]=entry["spec"][resourceKind][field]
+                del entry["spec"][resourceKind]
+                if resourceKind=="pvc":
                     if args.convert_new_pvc_datasources_to_existing:    
                         entry["spec"]["existingPvc"]=True
                     if "claimInfo" in entry["spec"] and  entry["spec"]["existingPvc"]:    #Don't want to specify claimInfo when the DS references an existing PVC - should only occur when --convert_new_pvc_datasources_to_existing is true
                         del entry["spec"]["claimInfo"]
+                if resourceKind=="s3":  #For any datasources that reference credentials, convert the asset's id in the old cluster to the new cluster
+                    entry["spec"]["accessKeyAssetId"]=resourceOldIdToNewIdDb["credentials"]["accessKey"][entry["spec"]["accessKeyAssetId"]]
+                if resourceKind=="git":  #For any datasources that reference credentials, convert the asset's id in the old cluster to the new cluster
+                    entry["spec"]["passwordAssetId"]=resourceOldIdToNewIdDb["credentials"]["password"][entry["spec"]["passwordAssetId"]]
 
             if resourceType=="workload-template":
                 #Get ids of created assets to set in template json
@@ -418,7 +422,7 @@ if __name__ == "__main__":
                     pass
                 try:
                     for datasource in assets["datasources"]:
-                        datasource["id"]=get_id_by_name(get_api_endpoint_for_datasource(datasource["kind"]),datasource["name"])
+                        datasource["id"]=get_id_by_name(get_api_endpoint_for_resource("datasource",datasource["kind"]),datasource["name"])
                         #Remove datasource name field since it's not in template API spec
                         del datasource["name"]
                 except KeyError as err:
@@ -445,29 +449,29 @@ if __name__ == "__main__":
                     responseJson=getResourceResponse.json()
                 elif response.status_code > 202 and response.status_code < 409:
                     logging.info(response.text)
-                    logging.info(f"Failed to create {resourceType} {entry["name"]}")
-                    logging.debug(f"Json sent was {json.dumps(entry, indent=4)}")
+                    logging.info(f"Failed to create {resourceType} {meta["name"]}")
+                    logging.debug(f"Json sent was {pprint.pformat(entry)}")
                     raise SystemExit(response.text)
                 else:
                     logging.info(response.text)
                     responseJson=response.json()
                 #Add id of newly created resource to resource DB. Structure is [resourceType][optional datasource kind][resource id]=json. E.G. [environment: [001: json, 002: json], datasource: [pvc: [001: json], git: [001: json]]] etc
-                if resourceType=="datasource":
-                    if datasourceKind not in resourceDb[resourceType]:
-                        resourceDb[resourceType][datasourceKind]={} #Have to create dictionary for datasourceKind before setting value inside it
-                    resourceDb[resourceType][datasourceKind][responseJson["meta"]["id"]]=responseJson
+                if resourceType in ["credentials","datasource"]:
+                    if resourceKind not in resourceDb[resourceType]:
+                        resourceDb[resourceType][resourceKind]={} #Have to create dictionary for resourceKind before setting value inside it
+                    resourceDb[resourceType][resourceKind][responseJson["meta"]["id"]]=responseJson
                 else:
                     resourceDb[resourceType][responseJson["meta"]["id"]]=responseJson
                 #Also add mapping of old id to new
-                if resourceType=="datasource":
-                    if datasourceKind not in resourceOldIdToNewIdDb[resourceType]:
-                        resourceOldIdToNewIdDb[resourceType][datasourceKind]={} #Have to create dictionary for datasourceKind before setting value inside it
-                    resourceOldIdToNewIdDb[resourceType][datasourceKind][oldId]=responseJson["meta"]["id"]
+                if resourceType in ["credentials","datasource"]:
+                    if resourceKind not in resourceOldIdToNewIdDb[resourceType]:
+                        resourceOldIdToNewIdDb[resourceType][resourceKind]={} #Have to create dictionary for resourceKind before setting value inside it
+                    resourceOldIdToNewIdDb[resourceType][resourceKind][oldId]=responseJson["meta"]["id"]
                 else:
                     resourceOldIdToNewIdDb[resourceType][oldId]=responseJson["meta"]["id"]
             except Exception as e:
-                logging.info(f"Failed to create {resourceType} {entry["name"]} due to {e}")
-                logging.debug(f"Json sent was {json.dumps(entry, indent=4)}")
+                logging.info(f"Failed to create {resourceType} {meta["name"]} due to {e}")
+                logging.debug(f"Json sent was {pprint.pformat(entry)}")
 
 
     # ######################### Workloads #########################

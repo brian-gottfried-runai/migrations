@@ -3,6 +3,7 @@ import os
 import json
 import requests
 import argparse
+import logging
 from dataclasses import dataclass
 
 @dataclass
@@ -26,10 +27,10 @@ class Cluster:
             return response_json["accessToken"]
 
         except requests.exceptions.HTTPError as err:
-            print(f"failed to get api token. err={err} \n message={err.response.text}" )
+            logging.info(f"failed to get api token. err={err} \n message={err.response.text}" )
             raise SystemExit(err)
         except requests.exceptions.JSONDecodeError as err:
-            print(f"failed to decode json response. err={err}")
+            logging.info(f"failed to decode json response. err={err}")
             raise SystemExit(err)
 
 
@@ -51,6 +52,10 @@ if __name__ == "__main__":
     parser.add_argument('-l', '--log_level', type=str, help="Log level (INFO,WARN,DEBUG,etc)", default="INFO")
 
     args=parser.parse_args()
+
+    logging.basicConfig(level=args.log_level, format='%(levelname)s: %(message)s\n')
+    if args.log_level=="DEBUG":
+        logging.getLogger("urllib3").setLevel("WARNING")   #Set Requests level to warning to avoid clogging logs with useless messages
 
     cluster = Cluster(
         base_url=args.base_url,
@@ -113,18 +118,19 @@ if __name__ == "__main__":
     policyList=response.json()
 
     policies={"entries": []}
-    for entry in policyList["policies"]:
-        type=entry["type"]
-        scope=entry["meta"]["scope"]
-        params=f"scope={scope}"
-        if scope=="project":
-            params=f"{params}&projectId={entry["meta"]["projectId"]}"
-        elif scope=="department":
-            params=f"{params}&departmentId={entry["meta"]["departmentId"]}"
-        response = requests.get(f"{cluster.base_url}/api/v1/policy/{type}", headers=headers, params=params)
-        response.raise_for_status()
-        policies["entries"].append(response.json())
-    workloadPolicy = policies
+    if "policies" in policyList:
+        for entry in policyList["policies"]:
+            type=entry["type"]
+            scope=entry["meta"]["scope"]
+            params=f"scope={scope}"
+            if scope=="project":
+                params=f"{params}&projectId={entry["meta"]["projectId"]}"
+            elif scope=="department":
+                params=f"{params}&departmentId={entry["meta"]["departmentId"]}"
+            response = requests.get(f"{cluster.base_url}/api/v1/policy/{type}", headers=headers, params=params)
+            response.raise_for_status()
+            policies["entries"].append(response.json())
+        workloadPolicy = policies
 
     #### Interactive Workloads ####
     response = requests.get(f"{cluster.base_url}/v1/k8s/clusters/{cluster.cluster_id}/workspaces", headers=headers)
@@ -142,34 +148,42 @@ if __name__ == "__main__":
     response.raise_for_status()
     users = response.json()
 
+    #### Credentials ####
+    response = requests.get(f"{cluster.base_url}/api/v1/asset/credentials", headers=headers)
+    response.raise_for_status()
+    credentials = response.json()
+
     directory_name="2.16_cluster_json"
     try:
         os.mkdir(directory_name)
-        print(f"Directory '{directory_name}' created successfully.")
+        logging.info(f"Directory '{directory_name}' created successfully.")
     except FileExistsError:
-        print(f"Directory '{directory_name}' already exists.")
+        logging.info(f"Directory '{directory_name}' already exists.")
 
-    print(f"Node Pools: {node_pools}")
+    logging.info("Writing resources to files")
+    logging.debug(f"Node Pools: {node_pools}")
     write_json_to_file(f"{directory_name}/node_pool.json",node_pools)
-    print(f"Departments: {departments}")
+    logging.debug(f"Departments: {departments}")
     write_json_to_file(f"{directory_name}/department.json",departments)
-    print(f"Projects: {projects}")
+    logging.debug(f"Projects: {projects}")
     write_json_to_file(f"{directory_name}/project.json",projects)
-    print(f"Access Rules: {access_rules}")
+    logging.debug(f"Access Rules: {access_rules}")
     write_json_to_file(f"{directory_name}/access_rule.json",access_rules)
-    print(f"Compute Assets: {compute_assets}")
+    logging.debug(f"Compute Assets: {compute_assets}")
     write_json_to_file(f"{directory_name}/compute.json",compute_assets)
-    print(f"Environment Assets: {environment_assets}")
+    logging.debug(f"Environment Assets: {environment_assets}")
     write_json_to_file(f"{directory_name}/environment.json",environment_assets)
-    print(f"Workload Templates: {workload_templates}")
+    logging.debug(f"Workload Templates: {workload_templates}")
     write_json_to_file(f"{directory_name}/workload-template.json",workload_templates)
-    print(f"Datasources: {datasources}")
+    logging.debug(f"Datasources: {datasources}")
     write_json_to_file(f"{directory_name}/datasource.json",datasources)
-    print(f"Policies: {policies}")
+    logging.debug(f"Policies: {policies}")
     write_json_to_file(f"{directory_name}/policy.json",policies)
-    print(f"Interactive Workloads: {iws}")
+    logging.debug(f"Interactive Workloads: {iws}")
     write_json_to_file(f"{directory_name}/iw.json",iws)
-    print(f"Training Workloads: {tws}")
+    logging.debug(f"Training Workloads: {tws}")
     write_json_to_file(f"{directory_name}/tw.json",tws)
-    print(f"Local Users: {users}")
+    logging.debug(f"Local Users: {users}")
     write_json_to_file(f"{directory_name}/users.json",users)
+    logging.debug(f"Credentials: {credentials}")
+    write_json_to_file(f"{directory_name}/credentials.json",credentials)
