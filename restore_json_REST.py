@@ -167,6 +167,12 @@ if __name__ == "__main__":
     projects = restore_json_from_file(f"{directory_name}/project.json")
     for project in projects:
         old_projects_map[project["id"]] = project["name"]
+
+    ##### Node Types #####
+    old_nodetypes_map = {}
+    nodetypes = restore_json_from_file(f"{directory_name}/nodetypes.json")
+    for nodetype in nodetypes:
+        old_nodetypes_map[nodetype["name"]] = nodetype["id"]
     
     
     ######################### Node Pools #########################
@@ -256,6 +262,14 @@ if __name__ == "__main__":
         old_departments_map_id_to_new_id[old_departments_map[department["name"]]] = department["id"]
         new_departments_map[department["name"]] = department["id"]
 
+    old_nodetypes_map_id_to_new_id = {}
+    response = requests.get(f"{cluster.base_url}/v1/k8s/clusters/{cluster.cluster_id}/nodetypes", headers=headers)
+    response.raise_for_status()
+    nodetypes = response.json()
+    
+    for nodetype in nodetypes:
+        old_nodetypes_map_id_to_new_id[old_nodetypes_map[nodetype["name"]]] = nodetype["id"]
+
 
     for project in projects:
         try:
@@ -264,6 +278,10 @@ if __name__ == "__main__":
             for i, node_pool_resource in enumerate(project["nodePoolsResources"]):
                 project_node_pool_resource_name = project["nodePoolsResources"][i]["nodePool"]["name"]
                 project["nodePoolsResources"][i]["nodePool"]["id"] = node_pools_map[project_node_pool_resource_name]
+            for workloadType in project["nodeAffinity"]:
+                for i, nodeType in enumerate(project["nodeAffinity"][workloadType]["selectedTypes"]):
+                    oldNodeTypeId=project["nodeAffinity"][workloadType]["selectedTypes"][i]["id"]
+                    project["nodeAffinity"][workloadType]["selectedTypes"][i]["id"]=old_nodetypes_map_id_to_new_id[oldNodeTypeId]
             response = requests.post(f"{cluster.base_url}/v1/k8s/clusters/{cluster.cluster_id}/projects", headers=headers, json=project)
             if response.status_code == 409 and "already exists" in response.text:
                 logging.info(f"Skipping existing project {project["name"]}")

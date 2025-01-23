@@ -87,6 +87,12 @@ if __name__ == "__main__":
     response.raise_for_status()
     projects=response.json()
 
+    ##### Node Types #####
+    #This is only relevant if you have created a Node Type for a given project as part of a Node Affinity rule
+    response = requests.get(f"{cluster.base_url}/v1/k8s/clusters/{cluster.cluster_id}/nodetypes", headers=headers)
+    response.raise_for_status()
+    nodetypes=response.json()
+
     #### Access Rules ####
     response = requests.get(f"{cluster.base_url}/api/v1/authorization/access-rules", headers=headers)
     response.raise_for_status()
@@ -167,6 +173,8 @@ if __name__ == "__main__":
     write_json_to_file(f"{directory_name}/department.json",departments)
     logging.debug(f"Projects: {projects}")
     write_json_to_file(f"{directory_name}/project.json",projects)
+    logging.debug(f"Node Types: {nodetypes}")
+    write_json_to_file(f"{directory_name}/nodetypes.json",nodetypes)
     logging.debug(f"Access Rules: {access_rules}")
     write_json_to_file(f"{directory_name}/access_rule.json",access_rules)
     logging.debug(f"Compute Assets: {compute_assets}")
