@@ -124,19 +124,19 @@ if __name__ == "__main__":
     policyList=response.json()
 
     policies={"entries": []}
-    if "policies" in policyList:
-        for entry in policyList["policies"]:
-            type=entry["type"]
-            scope=entry["meta"]["scope"]
-            params=f"scope={scope}"
-            if scope=="project":
-                params=f"{params}&projectId={entry["meta"]["projectId"]}"
-            elif scope=="department":
-                params=f"{params}&departmentId={entry["meta"]["departmentId"]}"
-            response = requests.get(f"{cluster.base_url}/api/v1/policy/{type}", headers=headers, params=params)
-            response.raise_for_status()
-            policies["entries"].append(response.json())
-        workloadPolicy = policies
+    # if "policies" in policyList:
+    #     for entry in policyList["policies"]:
+    #         type=entry["type"]
+    #         scope=entry["meta"]["scope"]
+    #         params=f"scope={scope}"
+    #         if scope=="project":
+    #             params=f"{params}&projectId={entry["meta"]["projectId"]}"
+    #         elif scope=="department":
+    #             params=f"{params}&departmentId={entry["meta"]["departmentId"]}"
+    #         response = requests.get(f"{cluster.base_url}/api/v1/policy/{type}", headers=headers, params=params)
+    #         response.raise_for_status()
+    #         policies["entries"].append(response.json())
+    #     workloadPolicy = policies
 
     #### Interactive Workloads ####
     response = requests.get(f"{cluster.base_url}/v1/k8s/clusters/{cluster.cluster_id}/workspaces", headers=headers)
