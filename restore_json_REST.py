@@ -270,6 +270,11 @@ if __name__ == "__main__":
     for nodetype in nodetypes:
         old_nodetypes_map_id_to_new_id[old_nodetypes_map[nodetype["name"]]] = nodetype["id"]
 
+    for project in projects:
+        try:
+            del project["permissions"]
+        except KeyError as err:
+            continue
 
     for project in projects:
         try:
