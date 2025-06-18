@@ -143,7 +143,7 @@ if __name__ == "__main__":
 
     token = cluster.generate_api_token()
     headers = {"authorization": f"Bearer {token}", 'content-type': "application/json"}
-    directory_name="2.16_cluster_json"
+    directory_name="jhu_2.16_cluster_json"
     
     ##### NodePools #####
     node_pools_map={}
@@ -425,7 +425,7 @@ if __name__ == "__main__":
                 if resourceKind=="pvc":
                     if args.convert_new_pvc_datasources_to_existing:    
                         entry["spec"]["existingPvc"]=True
-                    if "claimInfo" in entry["spec"] and  entry["spec"]["existingPvc"]:    #Don't want to specify claimInfo when the DS references an existing PVC - should only occur when --convert_new_pvc_datasources_to_existing is true
+                    if "claimInfo" in entry["spec"] and  entry["spec"].get("existingPvc",False):    #Don't want to specify claimInfo when the DS references an existing PVC - should only occur when --convert_new_pvc_datasources_to_existing is true
                         del entry["spec"]["claimInfo"]
                 if resourceKind=="s3":  #For any datasources that reference credentials, convert the asset's id in the old cluster to the new cluster
                     entry["spec"]["accessKeyAssetId"]=resourceOldIdToNewIdDb["credentials"]["accessKey"][entry["spec"]["accessKeyAssetId"]]
